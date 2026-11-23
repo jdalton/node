@@ -716,6 +716,10 @@ struct SnapshotData {
   // v8::ScriptCompiler::CachedData is not copyable.
   std::vector<builtins::CodeCacheInfo> code_cache;
 
+  // FromFile() points V8's startup data into this buffer to avoid copying it.
+  // NewIsolate() retains the first file-backed blob for V8's process lifetime.
+  std::shared_ptr<std::vector<char>> file_blob{};
+
   void ToFile(FILE* out) const;
   std::vector<char> ToBlob() const;
   // If returns false, the metadata doesn't match the current Node.js binary,

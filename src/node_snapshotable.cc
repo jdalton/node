@@ -1,5 +1,6 @@
 
 #include "node_snapshotable.h"
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -650,7 +651,27 @@ const SnapshotData* SnapshotData::FromEmbedderWrapper(
 }
 
 bool SnapshotData::FromFile(SnapshotData* out, FILE* in) {
-  return FromBlob(out, ReadFileSync(in));
+  out->file_blob = std::make_shared<std::vector<char>>(ReadFileSync(in));
+  if (!FromBlob(
+          out,
+          std::string_view(out->file_blob->data(), out->file_blob->size()),
+          DataOwnership::kNotOwned)) {
+    return false;
+  }
+
+  // Keep the file-backed blob only when its non-V8 data is small. The parser
+  // copies the code cache, so retaining a much larger file would waste memory.
+  constexpr size_t kMaxUnusedFileData = 64 * 1024;
+  const size_t snapshot_size =
+      static_cast<size_t>(out->v8_snapshot_blob_data.raw_size);
+  if (out->file_blob->size() - snapshot_size > kMaxUnusedFileData) {
+    char* snapshot = new char[snapshot_size];
+    memcpy(snapshot, out->v8_snapshot_blob_data.data, snapshot_size);
+    out->v8_snapshot_blob_data = {snapshot, static_cast<int>(snapshot_size)};
+    out->v8_snapshot_blob_data_ownership = DataOwnership::kOwned;
+    out->file_blob.reset();
+  }
+  return true;
 }
 
 bool SnapshotData::FromBlob(SnapshotData* out, const std::vector<char>& in) {

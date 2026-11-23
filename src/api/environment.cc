@@ -322,13 +322,18 @@ static Mutex first_snapshot_mutex;
 static bool first_snapshot_recorded = false;
 static v8::StartupData first_snapshot_blob{nullptr, 0};
 static const intptr_t* first_external_references = nullptr;
+static std::shared_ptr<std::vector<char>> first_snapshot_blob_owner;
 
-static void UseFirstSnapshot(Isolate::CreateParams* params) {
+static void UseFirstSnapshot(Isolate::CreateParams* params,
+                             const SnapshotData* snapshot_data) {
   Mutex::ScopedLock lock(first_snapshot_mutex);
   if (!first_snapshot_recorded) {
     first_snapshot_recorded = true;
     if (params->snapshot_blob != nullptr) {
       first_snapshot_blob = *params->snapshot_blob;
+    }
+    if (snapshot_data != nullptr) {
+      first_snapshot_blob_owner = snapshot_data->file_blob;
     }
     first_external_references = params->external_references;
   }
@@ -357,7 +362,7 @@ Isolate* NewIsolate(Isolate::CreateParams* params,
     SnapshotBuilder::InitializeIsolateParams(snapshot_data, params);
   }
 
-  UseFirstSnapshot(params);
+  UseFirstSnapshot(params, snapshot_data);
 
   // Register the isolate on the platform before the isolate gets initialized,
   // so that the isolate can access the platform during initialization.
